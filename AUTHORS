@@ -1,0 +1,8 @@
+Credits:
+
+Based on concepts implemented by Blazer for the Renegade FDS - "Blaze Regulator"
+Ab for the maceregulator proof of concepts
+Maceman for development of original POC - specifically the nodejs bridging bot concept
+Adam Mitchell for creation of the seperate thread code snippet
+
+Thanks to advice and contributions from the OpenRA Developers on how to make this work (https://openra.net)

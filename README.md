@@ -1,5 +1,5 @@
 # MR-bridge
-Addon for the OpenRA Dedicated Server to provide:
+Addon for the OpenRA Dedicated Server which aims to provide:
 
 1. Commands that can be entered into the dedicated server console window (i.e. stdin) for server administration
 2. Remote administration connectivity, encrypted and password protected, which allows for remotely issuing the administration commands, and reading viewing console outputs

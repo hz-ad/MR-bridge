@@ -47,6 +47,14 @@ namespace OpenRA.Mods.Common.Server
                     Console.WriteLine("Sending Test Message to game");
                     server.SendMessage(testmsg);
                 }
+		
+		if (line.StartsWith("say "))
+                {
+                    var smsg = line.Remove(0, 4);
+                    string.Format(smsg);
+                    Console.WriteLine(smsg);
+                    server.SendMessage(smsg);
+                }
 
                 if (line == "kick0")
                 {

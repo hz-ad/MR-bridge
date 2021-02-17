@@ -16,67 +16,70 @@ using S = OpenRA.Server.Server;
 
 namespace OpenRA.Mods.Common.Server
 {
-    public class ConsoleIO : ServerTrait, ITick, INotifyServerStart, INotifyServerShutdown
-    {
+	public class ConsoleIO : ServerTrait, ITick, INotifyServerStart, INotifyServerShutdown
+	{
 		Thread consoleThread;
 		ConcurrentQueue<string> queue;
 
 		public void ServerStarted(S server)
-        {
-            queue = new ConcurrentQueue<string>();
-            consoleThread = new Thread(ORAConsole) { IsBackground = true };
-            consoleThread.Start(queue);
-        }
+		{
+			queue = new ConcurrentQueue<string>();
+			consoleThread = new Thread(ORAConsole) { IsBackground = true };
+			consoleThread.Start(queue);
+		}
 
 		public void Tick(S server)
-        {
-            if (queue.TryDequeue(out var line))
-            {
+		{
+			if (queue.TryDequeue(out var line))
+			{
+				// Do your line processing logic here, on the server thread.
+				Console.WriteLine("You typed: {0}", line);
 
-                Console.WriteLine("You typed: {0}", line);
+				if (line == "exit")
+				{
+					Console.WriteLine("OK, shutting down!");
+					server.Shutdown();
+				}
 
-                if (line == "exit")
-                {
-                    Console.WriteLine("OK, shutting down!");
-                    server.Shutdown();
-                }
+				if (line == "testmsg")
+				{
+					var testmsg = string.Format("Hello this is a message from the console!");
+					Console.WriteLine("Sending Test Message to game");
+					server.SendMessage(testmsg);
+				}
 
-                if (line == "testmsg")
-                {
-                    var testmsg = string.Format("Hello this is a message from the console!");
-                    Console.WriteLine("Sending Test Message to game");
-                    server.SendMessage(testmsg);
-                }
-		
-		if (line.StartsWith("say "))
-                {
-                    var smsg = line.Remove(0, 4);
-                    string.Format(smsg);
-                    Console.WriteLine(smsg);
-                    server.SendMessage(smsg);
-                }
+				if (line.StartsWith("say "))
+				{
+					var smsg = line.Remove(0, 4);
+					string.Format(smsg);
+					Console.WriteLine(smsg);
+					server.SendMessage(smsg);
+				}
 
-                if (line == "kick0")
-                {
-					var aUID = 0;
-					var kickUID = server.LobbyInfo.ClientWithIndex(aUID);
-					Console.WriteLine("Kicking CID {0}", kickUID);
-					var testmsg1 = string.Format("Kicking CID {0}", kickUID);
-					LobbyCommands.Kick(kickUID);
-					server.SendMessage(testmsg1);
+				if (line.StartsWith("kick "))
+				{
+					var aUID = line.Remove(0, 5);
+					int kickUID;
+					int.TryParse(aUID, out kickUID);
+					Console.WriteLine("Kicking CID {0}", kickUID.ToString());
+					server.SendMessage("Kicking CID {0}".F(kickUID.ToString()));
+					var kickConn = server.Conns.SingleOrDefault(c => server.GetClient(c) != null && server.GetClient(c).Index == kickUID);
+					server.DropClient(kickConn);
+					if (server.State != ServerState.GameStarted)
+					{
+					server.SyncLobbyClients();
+					server.SyncLobbySlots();
+					}
+				}
 
-
-					// server.DropClient(kickUID);
-                }
-
-                if (line == "changemap")
-                {
+				if (line == "changemap")
+				{
 					var mapid = "5706ef75deb3c125b4f77e834d42e99eb1ebde73";
 					Order.Command("map " + mapid);
-                }
+				}
 
-                if (line == "status")
-                {
+				if (line == "status")
+				{
 					Console.WriteLine(string.Format("CurMap: {0} \n", server.Map.Title));
 					Console.WriteLine(string.Format("MapHash: {0} \n", server.LobbyInfo.GlobalSettings.Map));
 					Console.WriteLine(string.Format("CurConnections: {0} \n", server.LobbyInfo.Clients.Count()));
@@ -86,34 +89,34 @@ namespace OpenRA.Mods.Common.Server
 					var testbuffer = server.Conns.ToArray();
 					foreach (var item in testbuffer)
 						{
-                        var clientIdT = server.GetClient(item); // make the temporary array the client ID
-                        Console.WriteLine(string.Format("ID: {0} IP: {1} TEAM: {2} SPEC: {3}, NAME: {4} \n", clientIdT.Index.ToString(), clientIdT.IPAddress.ToString(), clientIdT.Team.ToString(), clientIdT.IsObserver.ToString(), clientIdT.Name.ToString()));
+						var clientIdT = server.GetClient(item); // make the temporary array the client ID
+						Console.WriteLine(string.Format("ID: {0} IP: {1} TEAM: {2} SPEC: {3}, NAME: {4} \n", clientIdT.Index.ToString(), clientIdT.IPAddress.ToString(), clientIdT.Team.ToString(), clientIdT.IsObserver.ToString(), clientIdT.Name.ToString()));
 						}
-                }
-            }
-        }
+				}
+			}
+		}
 
 		public void ServerShutdown(S server)
-        {
-            consoleThread.Abort();
-        }
+		{
+			consoleThread.Abort();
+		}
 
 		public static void ORAConsole(object obj)
-        {
-            Console.WriteLine("Console input thread started.");
-            try
+		{
+			Console.WriteLine("Console input thread started.");
+			try
 			{
 				var queue = (ConcurrentQueue<string>)obj;
 				while (true)
-                {
-                    var line = Console.ReadLine(); // Get string from user
-                    queue.Enqueue(line);
-                }
-            }
-            catch (ThreadAbortException)
+				{
+					var line = Console.ReadLine(); // Get string from user
+					queue.Enqueue(line);
+				}
+			}
+			catch (ThreadAbortException)
 			{
-                Console.WriteLine("Console input thread stopped.");
-            }
-        }
-    }
+				Console.WriteLine("Console input thread stopped.");
+			}
+		}
+	}
 }

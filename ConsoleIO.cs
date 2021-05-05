@@ -37,8 +37,26 @@ namespace OpenRA.Mods.Common.Server
 
 				if (line == "exit")
 				{
-					Console.WriteLine("OK, shutting down!");
-					server.Shutdown();
+					// Console.WriteLine("OK, shutting down!");
+					Console.WriteLine("This command is disabled");
+					// server.Shutdown();
+				}
+
+				if (line == "ads")
+				{
+					var adFile = Path.Combine(Platform.SupportDir, "mrads.txt");
+					if (!File.Exists(adFile))
+					{
+						File.WriteAllText(adFile, "[MR] Welcome to our server. Good luck, have fun!");
+					}
+
+					if (File.Exists(adFile))
+					{
+					var xlines = File.ReadAllLines(adFile);
+					var lineStr = xlines.Random(server.Random);
+					server.SendMessage(lineStr);
+					}
+
 				}
 
 				if (line == "testmsg")
@@ -48,12 +66,64 @@ namespace OpenRA.Mods.Common.Server
 					server.SendMessage(testmsg);
 				}
 
+				if (line == "help")
+				{
+					Console.WriteLine("Available commands: say, psay, status, kick, tban, admin, deladmin, ads, help. Type help commandName for more information.");
+				}
+
 				if (line.StartsWith("say "))
 				{
 					var smsg = line.Remove(0, 4);
 					string.Format(smsg);
 					Console.WriteLine(smsg);
-					server.SendMessage(smsg);
+					server.SendMessage("[MR] {0}".F(smsg));
+				}
+
+				if (line == "help psay")
+				{
+					Console.WriteLine("Syntax: psay userID 'message here'");
+					Console.WriteLine("WARNING: Private messages are unencrypted, and may be saved to replay files. Use with caution");
+				}
+
+				if (line.StartsWith("psay ") && line.Length > 7)
+				{
+					var smsg = line.Remove(0, 5);
+					int index = smsg.IndexOf('\'');
+					if (index >= 0) {
+						// Console.WriteLine("Index was greater than 0");
+					int msgUID = Int32.Parse(smsg.Substring(0, index));
+					var msgConn = server.Conns.SingleOrDefault(c => server.GetClient(c) != null && server.GetClient(c).Index == msgUID);
+					if (msgConn != null)
+					{
+						// Console.WriteLine("msgConn was not null");
+						smsg = smsg.Remove(0, index - 1);
+						Match match = Regex.Match(smsg, @"'([^']*)");
+						if (match.Success)
+						{
+							var msgClient = server.GetClient(msgConn);
+							server.SendOrderTo(msgConn, "Message", "[MR] Private Msg: {0}".F(match.Groups[1].Value));
+							Console.WriteLine("[MR] PMsg to {0}: {1}", msgClient.Name, match.Groups[1].Value);
+						}
+					}
+				}
+									}
+
+				if (line.StartsWith("map ") && server.State != ServerState.GameStarted)
+				{
+					// lock(server.LobbyInfo)
+					// {
+					var mapID = line.Remove(0, 4);
+					string.Format(mapID);
+					// server.Map = server.ModData.MapCache[mapID];;
+					// LobbyCommands.LoadMapSettings(server, server.LobbyInfo.GlobalSettings, server.Map.Rules);
+					Console.WriteLine("Changed map to {0}", mapID);
+					server.SendMessage("[MR] Changed map to {0}".F(mapID));
+					// }
+				}
+
+				if (line == "help kick")
+				{
+					Console.WriteLine("Syntax: kick UserID");
 				}
 
 				if (line.StartsWith("kick "))
@@ -61,21 +131,111 @@ namespace OpenRA.Mods.Common.Server
 					var aUID = line.Remove(0, 5);
 					int kickUID;
 					int.TryParse(aUID, out kickUID);
-					Console.WriteLine("Kicking CID {0}", kickUID.ToString());
-					server.SendMessage("Kicking CID {0}".F(kickUID.ToString()));
 					var kickConn = server.Conns.SingleOrDefault(c => server.GetClient(c) != null && server.GetClient(c).Index == kickUID);
-					server.DropClient(kickConn);
-					if (server.State != ServerState.GameStarted)
+					if (kickConn != null)
 					{
-					server.SyncLobbyClients();
-					server.SyncLobbySlots();
+						var kickClient = server.GetClient(kickConn);
+						Console.WriteLine("Kicking CID {0} - {1}", kickUID.ToString(), kickClient.Name);
+						server.SendMessage("[MR] Kicking CID {0} - {1}".F(kickUID.ToString(), kickClient.Name));
+						server.SendOrderTo(kickConn, "ServerError", "You were kicked by the console.");
+						server.DropClient(kickConn);
+						if (server.State != ServerState.GameStarted)
+						{
+							server.SyncLobbyClients();
+							server.SyncLobbySlots();
+						}
 					}
 				}
 
-				if (line == "changemap")
+				if (line.StartsWith("tban "))
 				{
-					var mapid = "5706ef75deb3c125b4f77e834d42e99eb1ebde73";
-					Order.Command("map " + mapid);
+					var aUID = line.Remove(0, 5);
+					int banUID;
+					int.TryParse(aUID, out banUID);
+					var banConn = server.Conns.SingleOrDefault(c => server.GetClient(c) != null && server.GetClient(c).Index == banUID);
+					if (banConn != null)
+					{
+						var banClient = server.GetClient(banConn);
+						server.SendOrderTo(banConn, "ServerError", "You were temp banned by the console.");
+						server.TempBans.Add(banClient.IPAddress);
+						server.DropClient(banConn);
+						Console.WriteLine("Tempbanning CID {0} - {1}", banUID.ToString(), banClient.Name);
+						server.SendMessage("[MR] Tempbanning CID {0} - {1}".F(banUID.ToString(),banClient.Name));
+						if (server.State != ServerState.GameStarted)
+						{
+							server.SyncLobbyClients();
+							server.SyncLobbySlots();
+						}
+					}
+				}
+
+				if (line.StartsWith("ipban "))
+				{
+					string aIPstr = line.Remove(0, 5);
+					Regex validIpV4AddressRegex = new Regex(@"^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$", RegexOptions.IgnoreCase);
+					if (!string.IsNullOrWhiteSpace(aIPstr))
+					{
+						bool flag = validIpV4AddressRegex.IsMatch(aIPstr.Trim());
+						if (flag)
+						{
+							server.TempBans.Add(aIPstr.Trim());
+							Console.WriteLine("TempIP Ban {0}", aIPstr.Trim());
+							Log.Write("server", "TempIP Ban {0}", aIPstr.Trim());
+						}
+						else
+						{
+							Console.WriteLine("{0} is not a valid IP", aIPstr.ToString());
+						}
+
+					}
+				}
+
+				if (line == "banlist")
+				{
+					foreach (var item in server.TempBans)
+					Console.WriteLine(item);
+				}
+
+				if (line.StartsWith("admin "))
+				{
+					var aUID = line.Remove(0, 6);
+					int adminUID;
+					int.TryParse(aUID, out adminUID);
+					var adminConn = server.Conns.SingleOrDefault(c => server.GetClient(c) != null && server.GetClient(c).Index == adminUID);
+					if (adminConn != null)
+					{
+						var adminClient = server.GetClient(adminConn);
+						adminClient.IsAdmin = true;
+						Console.WriteLine("Setting Admin {0} - {1}]", adminUID.ToString(), adminClient.Name);
+						server.SendMessage("[MR] Setting Admin {0} - {1}".F(adminUID.ToString(), adminClient.Name));
+						server.SendOrderTo(adminConn, "Message", "You have been set as an admin by the console");
+						if (server.State != ServerState.GameStarted)
+						{
+							server.SyncLobbyClients();
+							server.SyncLobbySlots();
+						}
+					}
+				}
+
+				if (line.StartsWith("deladmin "))
+				{
+					var aUID = line.Remove(0, 9);
+					int adminUID;
+					int.TryParse(aUID, out adminUID);
+					var adminConn = server.Conns.SingleOrDefault(c => server.GetClient(c) != null && server.GetClient(c).Index == adminUID);
+					if (adminConn != null)
+					{
+						var adminClient = server.GetClient(adminConn);
+						adminClient.IsAdmin = false;
+						Console.WriteLine("Removing Admin {0} - {1}]", adminUID.ToString(), adminClient.Name);
+						server.SendMessage("[MR] Removing Admin {0} - {1}".F(adminUID.ToString(), adminClient.Name));
+						server.SendOrderTo(adminConn, "Message", "Your admin status was revoked by the console");
+						if (server.State != ServerState.GameStarted)
+						{
+						server.SyncLobbyClients();
+						server.SyncLobbySlots();
+						}
+					}
 				}
 
 				if (line == "status")
@@ -103,7 +263,8 @@ namespace OpenRA.Mods.Common.Server
 
 		public static void ORAConsole(object obj)
 		{
-			Console.WriteLine("Console input thread started.");
+			Console.WriteLine("Console input thread started");
+			Console.WriteLine("MR-bridge Pre-release v 0.00");
 			try
 			{
 				var queue = (ConcurrentQueue<string>)obj;
@@ -118,5 +279,6 @@ namespace OpenRA.Mods.Common.Server
 				Console.WriteLine("Console input thread stopped.");
 			}
 		}
+
 	}
 }
